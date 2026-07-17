@@ -13,6 +13,8 @@ variables:
 
 stages:
   - build
+  - test
+  - native
 
 maven:build:
   stage: build
@@ -37,3 +39,26 @@ maven:test:
       - target/surefire-reports/TEST-*.xml
     paths:
     - target/surefire-reports/
+
+maven:native:
+  stage: native
+  image: registry.gitlab.com/broeskamp/devops/gitlab/docker-build-container/amazoncorretto-docker:${CORRETTO_VERSION}
+  before_script:
+  - |
+    actual_arch="$(uname -m)"
+    printf '%s\n' "$actual_arch" | grep -E "$EXPECTED_UNAME_PATTERN"
+  script:
+    - ./mvnw package
+      -Dnative
+      -Dmaven.compiler.release=25
+      -Dmaven.main.skip=true
+      -Dmaven.test.skip=true
+      -Dmaven.resources.skip=true
+      -Dquarkus.generate-code.skip=true
+      -Dquarkus.native.remote-container-build=true
+      -Dquarkus.native.builder-image=quay.io/quarkus/ubi9-quarkus-mandrel-builder-image:jdk-25
+  artifacts:
+    paths:
+      - target/*-runner
+      - target/*.properties
+      - target/*.so
