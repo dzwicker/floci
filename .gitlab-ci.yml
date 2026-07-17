@@ -15,6 +15,7 @@ stages:
   - build
   - test
   - native
+  - image
 
 maven:version:
   stage: .pre
@@ -78,3 +79,32 @@ maven:native:
       - target/*-runner
       - target/*.properties
       - target/*.so
+
+docker:image:
+  stage: image
+  image: docker
+  parallel:
+    matrix:
+      - RUNNER_TAG: [linux, arm]
+        COMPAT: ["false", "true"]
+  tags:
+    - $RUNNER_TAG
+  needs:
+    - job: maven:version
+      artifacts: true
+    - job: maven:native
+      parallel:
+        matrix:
+          - RUNNER_TAG: ['$[[ matrix.RUNNER_TAG ]]']
+      artifacts: true
+  script:
+    - |
+      if [ "$COMPAT" = "true" ]; then
+        dockerfile=compat
+        suffix=-compat
+      else
+        dockerfile=native-package
+        suffix=
+      fi
+      mv target native
+      docker build --file "docker/Dockerfile.$dockerfile" --build-arg "VERSION=$VERSION" --build-arg TARGETARCH=. --tag "$CI_REGISTRY_IMAGE:$VERSION-$RUNNER_TAG$suffix" .
