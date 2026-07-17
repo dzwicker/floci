@@ -16,6 +16,14 @@ stages:
   - test
   - native
 
+maven:version:
+  stage: .pre
+  script:
+    - echo "VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)" > version.env
+  artifacts:
+    reports:
+      dotenv: version.env
+
 maven:build:
   stage: build
   script:
