@@ -5,8 +5,6 @@ GCL_TIMESTAMPS=true
 #CONTAINER_EXECUTABLE=podman
 MOUNT_CACHE=true
 VOLUME=$(pwd)/.gitlab-ci-local/volumes/m2:/m2 /var/run/docker.sock:/var/run/docker.sock
-CI_REGISTRY=registry.gitlab.com
+#CI_REGISTRY=registry.gitlab.com
 #CI_REGISTRY_IMAGE=registry.gitlab.com/broeskamp/finevest/finevest-onboarding
 CORRETTO_VERSION=25-latest
-#provide CI_REGISTRY_USER in your local gcl config ~/.gitlab-ci-local/variables.yml
-#provide CI_JOB_TOKEN in your local gcl config ~/.gitlab-ci-local/variables.yml
