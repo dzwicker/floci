@@ -1,0 +1,27 @@
+include:
+  - project: 'broeskamp/devops/gitlab/gitlab-ci'
+    ref: main
+    file:
+      - '/workflow/workflow.yaml'
+      - '/versions/docker-build-container.yaml'
+
+default:
+  image: registry.gitlab.com/broeskamp/devops/gitlab/docker-build-container/amazoncorretto:${CORRETTO_VERSION}
+
+variables:
+  CORRETTO_JDK_VERSION: 25
+
+stages:
+  - build
+
+maven:build:
+  stage: build
+  script:
+    - ./mvnw clean package -DskipTests
+  artifacts:
+    paths:
+      - target/classes/
+      - target/test-classes/
+      - target/quarkus-app/
+      - target/floci-*.jar
+      - target/quarkus-artifact.properties
