@@ -43,21 +43,29 @@ maven:test:
 maven:native:
   stage: native
   image: registry.gitlab.com/broeskamp/devops/gitlab/docker-build-container/amazoncorretto-docker:${CORRETTO_VERSION}
-  before_script:
-  - |
-    actual_arch="$(uname -m)"
-    printf '%s\n' "$actual_arch" | grep -E "$EXPECTED_UNAME_PATTERN"
+  parallel:
+    matrix:
+      - RUNNER_TAG: [linux, arm]
+  tags:
+    - $RUNNER_TAG
   script:
-    - ./mvnw package
-      -Dnative
-      -Dmaven.compiler.release=25
-      -Dmaven.main.skip=true
-      -Dmaven.test.skip=true
-      -Dmaven.resources.skip=true
-      -Dquarkus.generate-code.skip=true
-      -Dquarkus.native.remote-container-build=true
-      -Dquarkus.native.builder-image=quay.io/quarkus/ubi9-quarkus-mandrel-builder-image:jdk-25
+    - |
+      set --
+      if [ "$RUNNER_TAG" = "linux" ]; then
+        set -- -Dquarkus.native.additional-build-args-append=-march=x86-64-v2
+      fi
+      ./mvnw package \
+        -Dnative \
+        -Dmaven.compiler.release=25 \
+        -Dmaven.main.skip=true \
+        -Dmaven.test.skip=true \
+        -Dmaven.resources.skip=true \
+        -Dquarkus.generate-code.skip=true \
+        -Dquarkus.native.remote-container-build=true \
+        -Dquarkus.native.builder-image=quay.io/quarkus/ubi9-quarkus-mandrel-builder-image:jdk-25 \
+        "$@"
   artifacts:
+    expire_in: 1 day
     paths:
       - target/*-runner
       - target/*.properties
