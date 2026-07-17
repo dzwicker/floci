@@ -4,6 +4,7 @@ include:
     file:
       - '/workflow/workflow.yaml'
       - '/versions/docker-build-container.yaml'
+      - '/docker/docker.yaml'
 
 default:
   image: registry.gitlab.com/broeskamp/devops/gitlab/docker-build-container/amazoncorretto:${CORRETTO_VERSION}
@@ -80,15 +81,20 @@ maven:native:
       - target/*.properties
       - target/*.so
 
-docker:image:
+.docker:
   stage: image
   image: docker
   parallel:
     matrix:
       - RUNNER_TAG: [linux, arm]
-        COMPAT: ["false", "true"]
   tags:
     - $RUNNER_TAG
+  before_script:
+    - !reference [.docker-auth, write]
+    - !reference [.docker-auth, registry]
+
+docker:image:
+  extends: .docker
   needs:
     - job: maven:version
       artifacts: true
@@ -98,13 +104,19 @@ docker:image:
           - RUNNER_TAG: ['$[[ matrix.RUNNER_TAG ]]']
       artifacts: true
   script:
-    - |
-      if [ "$COMPAT" = "true" ]; then
-        dockerfile=compat
-        suffix=-compat
-      else
-        dockerfile=native-package
-        suffix=
-      fi
-      mv target native
-      docker build --file "docker/Dockerfile.$dockerfile" --build-arg "VERSION=$VERSION" --build-arg TARGETARCH=. --tag "$CI_REGISTRY_IMAGE:$VERSION-$RUNNER_TAG$suffix" .
+    - mv target native
+    - docker build --file docker/Dockerfile.native-package --build-arg "VERSION=$VERSION" --build-arg TARGETARCH=. --tag "$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-$RUNNER_TAG" .
+    - docker push "$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-$RUNNER_TAG"
+
+docker:compat:
+  extends: .docker
+  needs:
+    - job: maven:version
+      artifacts: true
+    - job: docker:image
+      parallel:
+        matrix:
+          - RUNNER_TAG: ['$[[ matrix.RUNNER_TAG ]]']
+  script:
+    - docker build --build-context "floci/floci:$VERSION=docker-image://$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-$RUNNER_TAG" --file docker/Dockerfile.compat --build-arg "VERSION=$VERSION" --tag "$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-$RUNNER_TAG-compat" .
+    - docker push "$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-$RUNNER_TAG-compat"
