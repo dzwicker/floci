@@ -25,3 +25,15 @@ maven:build:
       - target/quarkus-app/
       - target/floci-*.jar
       - target/quarkus-artifact.properties
+
+maven:test:
+  stage: test
+  script:
+    - ./mvnw surefire:test
+  artifacts:
+    when: always
+    reports:
+      junit:
+      - target/surefire-reports/TEST-*.xml
+    paths:
+    - target/surefire-reports/
