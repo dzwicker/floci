@@ -110,6 +110,8 @@ docker:image:
 
 docker:compat:
   extends: .docker
+  tags:
+    - linux
   needs:
     - job: maven:version
       artifacts: true
@@ -118,5 +120,11 @@ docker:compat:
         matrix:
           - RUNNER_TAG: ['$[[ matrix.RUNNER_TAG ]]']
   script:
-    - docker build --build-context "floci/floci:$VERSION=docker-image://$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-$RUNNER_TAG" --file docker/Dockerfile.compat --build-arg "VERSION=$VERSION" --tag "$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-$RUNNER_TAG-compat" .
-    - docker push "$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-$RUNNER_TAG-compat"
+    - |
+      platform=linux/amd64
+      if [ "$RUNNER_TAG" = "arm" ]; then
+        platform=linux/arm64
+      fi
+      builder=$(docker buildx create --use --driver docker-container)
+      trap 'docker buildx rm "$builder"' EXIT
+      docker buildx build --push --platform "$platform" --build-context "floci/floci:$VERSION=docker-image://$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-$RUNNER_TAG" --file docker/Dockerfile.compat --build-arg "VERSION=$VERSION" --tag "$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-$RUNNER_TAG-compat" .
