@@ -93,7 +93,7 @@ maven:native:
     - !reference [.docker-auth, write]
     - !reference [.docker-auth, registry]
 
-docker:image:
+docker:floci:
   extends: .docker
   needs:
     - job: maven:version
@@ -108,14 +108,14 @@ docker:image:
     - docker build --file docker/Dockerfile.native-package --build-arg "VERSION=$VERSION" --build-arg TARGETARCH=. --tag "$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-$RUNNER_TAG" .
     - docker push "$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-$RUNNER_TAG"
 
-docker:compat:
+docker:floci-compat:
   extends: .docker
   tags:
     - linux
   needs:
     - job: maven:version
       artifacts: true
-    - job: docker:image
+    - job: docker:floci
       parallel:
         matrix:
           - RUNNER_TAG: ['$[[ matrix.RUNNER_TAG ]]']
