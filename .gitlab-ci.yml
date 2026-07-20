@@ -164,6 +164,8 @@ docker:release:
 gitlab:release:
   stage: release
   image: registry.gitlab.com/gitlab-org/cli:latest
+  variables:
+    GLAB_CONFIG_DIR: $CI_PROJECT_DIR/.glab-cli
   needs:
     - job: maven:version
       artifacts: true
