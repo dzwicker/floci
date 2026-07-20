@@ -17,6 +17,8 @@ stages:
   - test
   - native
   - image
+  - publish
+  - release
 
 maven:version:
   stage: .pre
@@ -137,3 +139,45 @@ docker:floci-compat:
       builder=$(docker buildx create --use --driver docker-container)
       trap 'docker buildx rm "$builder"' EXIT
       docker buildx build --push --platform "$platform" --build-context "floci/floci:$VERSION=docker-image://$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-$RUNNER_TAG" --file docker/Dockerfile.compat --build-arg "VERSION=$VERSION" --tag "$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-$RUNNER_TAG-compat" .
+
+docker:release:
+  stage: publish
+  image: docker
+  tags:
+    - linux
+  before_script:
+    - !reference [.docker-auth, write]
+    - !reference [.docker-auth, registry]
+  needs:
+    - job: maven:version
+      artifacts: true
+    - job: docker:floci
+    - job: docker:floci-compat
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+  script:
+    - docker buildx imagetools create --tag "$CI_REGISTRY_IMAGE:$VERSION" "$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-linux" "$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-arm"
+    - docker buildx imagetools create --tag "$CI_REGISTRY_IMAGE:$VERSION-compat" "$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-linux-compat" "$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-arm-compat"
+    - docker buildx imagetools inspect "$CI_REGISTRY_IMAGE:$VERSION"
+    - docker buildx imagetools inspect "$CI_REGISTRY_IMAGE:$VERSION-compat"
+
+gitlab:release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/cli:latest
+  needs:
+    - job: maven:version
+      artifacts: true
+    - job: docker:release
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
+  script:
+    - echo "Creating GitLab release $CI_COMMIT_TAG"
+  release:
+    tag_name: $CI_COMMIT_TAG
+    name: "Release $VERSION"
+    description: |
+      Internal Floci release $VERSION.
+
+      Images:
+      - $CI_REGISTRY_IMAGE:$VERSION
+      - $CI_REGISTRY_IMAGE:$VERSION-compat
