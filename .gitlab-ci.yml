@@ -115,8 +115,10 @@ docker:floci:
           - RUNNER_TAG: ['$[[ matrix.RUNNER_TAG ]]']
       artifacts: true
   script:
-    - mv target native
-    - mv native/*-runner native/application
+    - mv target native-artifact
+    - mkdir native
+    - find native-artifact -maxdepth 1 -type f ! -name '*-runner' -exec cp '{}' native/ \;
+    - cp native-artifact/*-runner native/application
     - docker build --file docker/Dockerfile.native-package --build-arg "VERSION=$VERSION" --build-arg TARGETARCH=. --tag "$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-$RUNNER_TAG" .
     - docker push "$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-$RUNNER_TAG"
 
