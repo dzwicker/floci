@@ -133,14 +133,9 @@ docker:floci-compat:
           - RUNNER_TAG: ['$[[ matrix.RUNNER_TAG ]]']
   script:
     - |
-      platform=linux/amd64
-      if [ "$RUNNER_TAG" = "arm" ]; then
-        platform=linux/arm64
-      fi
-      builder=$(docker buildx create --use --driver docker-container)
-      trap 'docker buildx rm "$builder"' EXIT
-      docker buildx build --push --platform "$platform" --build-context "floci/floci:$VERSION=docker-image://$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-$RUNNER_TAG" --file docker/Dockerfile.compat --build-arg "VERSION=$VERSION" --tag "$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-$RUNNER_TAG-compat" .
-      docker run --rm --platform "$platform" "$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-$RUNNER_TAG-compat" sh -c 'python3 --version && aws --version && python3 -c "import boto3"'
+      docker build --build-context "floci/floci:$VERSION=docker-image://$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-$RUNNER_TAG" --file docker/Dockerfile.compat --build-arg "VERSION=$VERSION" --tag "$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-$RUNNER_TAG-compat" .
+      docker push "$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-$RUNNER_TAG-compat"
+      docker run --rm "$CI_REGISTRY_IMAGE:tmp-$CI_PIPELINE_ID-$RUNNER_TAG-compat" sh -c 'python3 --version && aws --version && python3 -c "import boto3"'
 
 docker:release:
   stage: publish
