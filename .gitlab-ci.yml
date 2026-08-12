@@ -51,6 +51,8 @@ maven:build:
 
 maven:test:
   stage: test
+  tags:
+    - linux
   script:
     - ./mvnw surefire:test
   artifacts:
