@@ -34,6 +34,7 @@ class CognitoAttributeVerificationIntegrationTest {
     private static String poolId;
     private static String clientId;
     private static String accessToken;
+    private static String idToken;
     private static String emailVerificationCode;
 
     @BeforeAll
@@ -93,6 +94,7 @@ class CognitoAttributeVerificationIntegrationTest {
                 }
                 """.formatted(clientId, USERNAME, PASSWORD));
         accessToken = auth.path("AuthenticationResult").path("AccessToken").asText();
+        idToken = auth.path("AuthenticationResult").path("IdToken").asText();
     }
 
     @Test
@@ -335,6 +337,24 @@ class CognitoAttributeVerificationIntegrationTest {
                 .body("__type", equalTo("InvalidParameterException"))
                 .body("message", equalTo(
                         "Unable to verify attribute: phone_number no value set to verify"));
+    }
+
+    @Test
+    @Order(12)
+    void rejectsIdTokenForVerification() {
+        // VerifyUserAttribute must be authorized with an access token, not an ID token,
+        // even though both carry the same username/pool claims this simulator reads.
+        cognitoAction("VerifyUserAttribute", """
+                {
+                  "AccessToken": "%s",
+                  "AttributeName": "email",
+                  "Code": "123456"
+                }
+                """.formatted(idToken))
+                .then()
+                .statusCode(400)
+                .body("__type", equalTo("NotAuthorizedException"))
+                .body("message", equalTo("Invalid Access Token"));
     }
 
     private static void clearInspectionEndpoint(String path) {
