@@ -10,10 +10,12 @@ import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityPr
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AliasAttributeType;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AttributeType;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AuthFlowType;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.CodeDeliveryDetailsType;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.CodeMismatchException;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.ExpiredCodeException;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.ExplicitAuthFlowsType;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.MessageActionType;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.UpdateUserAttributesResponse;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.UserNotFoundException;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.VerifiedAttributeType;
 
@@ -86,7 +88,7 @@ class CognitoVerifyUserAttributeTest {
         clearInspectionEndpoint("/_aws/ses");
         clearInspectionEndpoint("/_aws/sns");
 
-        var emailDelivery = cognito.getUserAttributeVerificationCode(b -> b
+        CodeDeliveryDetailsType emailDelivery = cognito.getUserAttributeVerificationCode(b -> b
                         .accessToken(accessToken)
                         .attributeName("email"))
                 .codeDeliveryDetails();
@@ -95,7 +97,7 @@ class CognitoVerifyUserAttributeTest {
         assertThat(emailDelivery.destination()).isEqualTo("v***@e***");
         String emailCode = fetchLatestSesVerificationCode(email);
 
-        var phoneDelivery = cognito.getUserAttributeVerificationCode(b -> b
+        CodeDeliveryDetailsType phoneDelivery = cognito.getUserAttributeVerificationCode(b -> b
                         .accessToken(accessToken)
                         .attributeName("phone_number"))
                 .codeDeliveryDetails();
@@ -177,7 +179,7 @@ class CognitoVerifyUserAttributeTest {
 
         String accessToken = authenticate(clientId, oldEmail);
         clearInspectionEndpoint("/_aws/ses");
-        var update = cognito.updateUserAttributes(b -> b
+        UpdateUserAttributesResponse update = cognito.updateUserAttributes(b -> b
                 .accessToken(accessToken)
                 .userAttributes(AttributeType.builder().name("email").value(newEmail).build()));
 
@@ -231,7 +233,7 @@ class CognitoVerifyUserAttributeTest {
 
         String accessToken = authenticate(clientId, oldPhone);
         clearInspectionEndpoint("/_aws/sns");
-        var update = cognito.updateUserAttributes(b -> b
+        UpdateUserAttributesResponse update = cognito.updateUserAttributes(b -> b
                 .accessToken(accessToken)
                 .userAttributes(AttributeType.builder().name("phone_number").value(newPhone).build()));
 
