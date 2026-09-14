@@ -1770,6 +1770,13 @@ public class CognitoService implements ResourceProvider {
     }
 
     public void adminDeleteUser(String userPoolId, String username) {
+        CognitoUser resolvedUser = adminGetUser(userPoolId, username);
+        synchronized (userLock(userPoolId, resolvedUser.getUsername())) {
+            adminDeleteUserUnderUserLock(userPoolId, resolvedUser.getUsername());
+        }
+    }
+
+    private void adminDeleteUserUnderUserLock(String userPoolId, String username) {
         CognitoUser user = adminGetUser(userPoolId, username);
         for (String groupName : new ArrayList<>(user.getGroupNames())) {
             groupStore.get(groupKey(userPoolId, groupName)).ifPresent(group -> {

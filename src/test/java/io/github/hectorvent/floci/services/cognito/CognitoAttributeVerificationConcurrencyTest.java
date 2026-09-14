@@ -1,6 +1,7 @@
 package io.github.hectorvent.floci.services.cognito;
 
 import io.github.hectorvent.floci.config.TlsCertificateManager;
+import io.github.hectorvent.floci.core.common.AwsException;
 import io.github.hectorvent.floci.core.common.RegionResolver;
 import io.github.hectorvent.floci.core.storage.InMemoryStorage;
 import io.github.hectorvent.floci.services.acm.AcmService;
@@ -299,6 +300,54 @@ class CognitoAttributeVerificationConcurrencyTest {
             assertNull(harness.user().getAttributes().get("email"),
                     "verification finishing later must not restore a completed admin deletion");
             assertNull(harness.user().getPendingAttributes().get("email"));
+        } finally {
+            releaseConsume.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void verificationFinishingAfterAdminUserDeleteDoesNotResurrectTheUser() throws Exception {
+        VerificationCodeService codes = mock(VerificationCodeService.class);
+        CognitoMessageDispatcher dispatcher = mock(CognitoMessageDispatcher.class);
+        Harness harness = harness(codes, dispatcher);
+        CountDownLatch consumeEntered = new CountDownLatch(1);
+        CountDownLatch releaseConsume = new CountDownLatch(1);
+        CountDownLatch adminStarted = new CountDownLatch(1);
+
+        when(codes.issue(anyString(), anyString(), any(), any(Duration.class)))
+                .thenReturn(FIRST_CODE);
+        doAnswer(invocation -> {
+            assertEquals(FIRST_CODE, invocation.getArgument(3));
+            consumeEntered.countDown();
+            await(releaseConsume);
+            return null;
+        }).when(codes).consume(anyString(), anyString(), any(), anyString());
+        harness.service().updateUserAttributes(
+                harness.accessToken(), Map.of("email", FIRST_EMAIL));
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> verify = executor.submit(() -> harness.service().verifyUserAttribute(
+                    harness.accessToken(), "email", FIRST_CODE));
+            assertTrue(consumeEntered.await(5, TimeUnit.SECONDS));
+
+            Future<?> adminDelete = executor.submit(() -> {
+                adminStarted.countDown();
+                harness.service().adminDeleteUser(harness.poolId(), "alice");
+            });
+            assertTrue(adminStarted.await(5, TimeUnit.SECONDS));
+            assertThrows(TimeoutException.class,
+                    () -> adminDelete.get(100, TimeUnit.MILLISECONDS));
+
+            releaseConsume.countDown();
+            verify.get(5, TimeUnit.SECONDS);
+            adminDelete.get(5, TimeUnit.SECONDS);
+
+            AwsException notFound = assertThrows(AwsException.class,
+                    () -> harness.service().adminGetUser(harness.poolId(), "alice"),
+                    "verification finishing later must not resurrect a completed admin deletion");
+            assertEquals("UserNotFoundException", notFound.getErrorCode());
         } finally {
             releaseConsume.countDown();
             executor.shutdownNow();
