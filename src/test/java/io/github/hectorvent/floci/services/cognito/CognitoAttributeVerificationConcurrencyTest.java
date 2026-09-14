@@ -354,6 +354,68 @@ class CognitoAttributeVerificationConcurrencyTest {
         }
     }
 
+    @Test
+    void changePasswordFinishingDuringVerificationDoesNotLoseEitherChange() throws Exception {
+        // Demonstrates the per-user lock also serializes an operation outside the original
+        // five: ChangePassword never touched pending-attribute state before this fix, so
+        // nothing stopped it from racing VerifyUserAttribute's read-modify-write on the same
+        // whole-object user record.
+        VerificationCodeService codes = mock(VerificationCodeService.class);
+        CognitoMessageDispatcher dispatcher = mock(CognitoMessageDispatcher.class);
+        Harness harness = harness(codes, dispatcher);
+        CountDownLatch consumeEntered = new CountDownLatch(1);
+        CountDownLatch releaseConsume = new CountDownLatch(1);
+        CountDownLatch changeStarted = new CountDownLatch(1);
+
+        when(codes.issue(anyString(), anyString(), any(), any(Duration.class)))
+                .thenReturn(FIRST_CODE);
+        doAnswer(invocation -> {
+            assertEquals(FIRST_CODE, invocation.getArgument(3));
+            consumeEntered.countDown();
+            await(releaseConsume);
+            return null;
+        }).when(codes).consume(anyString(), anyString(), any(), anyString());
+        harness.service().updateUserAttributes(
+                harness.accessToken(), Map.of("email", FIRST_EMAIL));
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> verify = executor.submit(() -> harness.service().verifyUserAttribute(
+                    harness.accessToken(), "email", FIRST_CODE));
+            assertTrue(consumeEntered.await(5, TimeUnit.SECONDS));
+
+            Future<?> changePassword = executor.submit(() -> {
+                changeStarted.countDown();
+                harness.service().changePassword(harness.accessToken(), "Permanent1!", "Permanent2!");
+            });
+            assertTrue(changeStarted.await(5, TimeUnit.SECONDS));
+            assertThrows(TimeoutException.class,
+                    () -> changePassword.get(100, TimeUnit.MILLISECONDS));
+
+            releaseConsume.countDown();
+            verify.get(5, TimeUnit.SECONDS);
+            changePassword.get(5, TimeUnit.SECONDS);
+
+            assertEquals(FIRST_EMAIL, harness.user().getAttributes().get("email"),
+                    "the password change finishing after verification must not lose the promoted email");
+            assertEquals("true", harness.user().getAttributes().get("email_verified"));
+
+            assertThrows(AwsException.class, () -> harness.service().initiateAuth(
+                    harness.clientId(), "USER_PASSWORD_AUTH",
+                    Map.of("USERNAME", "alice", "PASSWORD", "Permanent1!")),
+                    "verification finishing must not lose the password change back to the old password");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> reAuth = (Map<String, Object>) harness.service().initiateAuth(
+                    harness.clientId(), "USER_PASSWORD_AUTH",
+                    Map.of("USERNAME", "alice", "PASSWORD", "Permanent2!"))
+                    .get("AuthenticationResult");
+            assertTrue(reAuth.get("AccessToken") instanceof String);
+        } finally {
+            releaseConsume.countDown();
+            executor.shutdownNow();
+        }
+    }
+
     private static Harness harness(VerificationCodeService codes,
                                    CognitoMessageDispatcher dispatcher) {
         CognitoService service = new CognitoService(
@@ -390,7 +452,8 @@ class CognitoAttributeVerificationConcurrencyTest {
                 client.getClientId(), "USER_PASSWORD_AUTH",
                 Map.of("USERNAME", "alice", "PASSWORD", "Permanent1!"))
                 .get("AuthenticationResult");
-        return new Harness(service, pool.getId(), (String) authentication.get("AccessToken"));
+        return new Harness(service, pool.getId(), client.getClientId(),
+                (String) authentication.get("AccessToken"));
     }
 
     private static void acceptOnlyLatestCode(VerificationCodeService codes,
@@ -415,7 +478,7 @@ class CognitoAttributeVerificationConcurrencyTest {
         }
     }
 
-    private record Harness(CognitoService service, String poolId, String accessToken) {
+    private record Harness(CognitoService service, String poolId, String clientId, String accessToken) {
         CognitoUser user() {
             return service.adminGetUser(poolId, "alice");
         }
