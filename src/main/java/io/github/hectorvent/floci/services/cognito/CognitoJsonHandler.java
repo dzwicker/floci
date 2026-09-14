@@ -1112,10 +1112,11 @@ public class CognitoJsonHandler {
         }
         node.set("UsernameConfiguration", objectMapper.valueToTree(p.getUsernameConfiguration() != null ? p.getUsernameConfiguration() : new HashMap<>()));
         node.set("AccountRecoverySetting", objectMapper.valueToTree(p.getAccountRecoverySetting() != null ? p.getAccountRecoverySetting() : new HashMap<>()));
-        node.set("UserAttributeUpdateSettings", objectMapper.valueToTree(
-                p.getUserAttributeUpdateSettings() != null
-                        ? p.getUserAttributeUpdateSettings()
-                        : new HashMap<>()));
+        // Same reasoning as UserPoolAddOns above: an unconfigured pool omits this optional
+        // member entirely rather than returning an empty object.
+        if (p.getUserAttributeUpdateSettings() != null && !p.getUserAttributeUpdateSettings().isEmpty()) {
+            node.set("UserAttributeUpdateSettings", objectMapper.valueToTree(p.getUserAttributeUpdateSettings()));
+        }
         node.put("UserPoolTier", p.getUserPoolTier() != null ? p.getUserPoolTier() : "ESSENTIALS");
 
         return node;
